@@ -9,6 +9,8 @@ Each morning, the script overwrites the attached Google Doc with an agenda like 
 ```
 🚨 Agenda for Tuesday, October 15
 
+Fun fact: [add fun fact here]
+
 Action Items:
 [Admin: add action items here]
 __________________________
@@ -130,6 +132,6 @@ Events in `EXCLUDE_KEYWORDS` never reach the Zoom check because they are filtere
 After the doc is created each morning:
 
 1. Open the bound Google Doc
-2. Fill in **Action Items** and review the **FYI** section
+2. Fill in **Fun fact**, **Action Items**, and review the **FYI** section
 3. Resolve any missing Zoom links flagged in the QA section
 4. Copy into Slack

@@ -438,6 +438,10 @@ function buildAgendaDoc_(date, events, fyiItems) {
   var titlePara = body.appendParagraph('🚨 Agenda for ' + dateHeading);
   titlePara.setHeading(DocumentApp.ParagraphHeading.HEADING1);
 
+  // ── Fun Fact ──────────────────────────────────────────────────────────────
+  body.appendParagraph('');
+  body.appendParagraph('Fun fact: [add fun fact here]');
+
   // ── Action Items (H2) ─────────────────────────────────────────────────────
   body.appendParagraph('');
   var actionHeading = body.appendParagraph('Action Items:');

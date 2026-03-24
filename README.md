@@ -7,7 +7,7 @@ A Google Apps Script that creates a formatted Google Doc agenda each morning by 
 Each morning, the script creates a Google Doc like this:
 
 ```
-🚨 Agenda for Tuesday, March 24
+🚨 Agenda for Tuesday, October 15
 
 Fun fact: [add fun fact here]
 
@@ -15,11 +15,11 @@ Action Items:
 [Admin: add action items here]
 __________________________
 
-• 9:00-9:45a: Core Services Leads (agenda)
-• 10:00-10:30a: Infra AI@work: biweekly (notes)
-• 10:35-11:00a: Chris / Andrew: biweekly (notes)
-• 11:00-11:30a: Chris / Bobby: biweekly
-• 12:30-1:15p: Fastly MASQUE Relay weekly
+• 9:00-9:45a: Engineering Leads (agenda)
+• 10:00-10:30a: Product Sync: biweekly (notes)
+• 10:35-11:00a: Taylor / Morgan: biweekly (notes)
+• 11:00-11:30a: Taylor / Riley: biweekly
+• 12:30-1:15p: Acme Vendor Sync weekly
 
 FYI:
 [Admin: add FYI items here]

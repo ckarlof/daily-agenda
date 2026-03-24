@@ -36,8 +36,16 @@
 // =============================================================================
 const CONFIG = {
   CALENDAR_ID: 'primary',         // 'primary' or a specific calendar email address
-  FOLDER_ID: '',                  // Google Drive folder ID to save docs into (empty = My Drive root)
-  SKIP_ZOOM_CHECK_KEYWORDS: [     // Event titles containing these words won't be flagged for missing Zoom
+  TIMEZONE: 'America/New_York', // IANA timezone for the agenda reader (e.g. 'America/New_York', 'Europe/London')
+  FYI_CALENDARS: [
+    { id: 'c_0d7b6c438e961742e737b9fd3a0fbd7ddc4fa863d93ac293f6fb407977ce8e57@group.calendar.google.com', shortName: 'CEE' },
+    { id: 'mozilla.com_3u6oeq497a54e07tg7e5h48leg@group.calendar.google.com', shortName: 'SLT' },
+    { id: 'c_0d34e4f8c4140929939a2e3f77c4e4b20be08af872469f8567ab38681c7395ca@group.calendar.google.com', shortName: 'CS' }
+
+    // Additional calendars whose events appear in the FYI section
+    // { id: 'example@group.calendar.google.com', shortName: 'Team OOO' },
+  ],
+  EXCLUDE_KEYWORDS: [             // Event titles containing these words are excluded from the agenda entirely (and implicitly skip the Zoom check)
     'lunch',
     'focus time',
     'block',
@@ -45,6 +53,9 @@ const CONFIG = {
     'ooo',
     'out of office',
     'commute',
+    'therapy'
+  ],
+  SKIP_ZOOM_CHECK_KEYWORDS: [     // Event titles containing these words appear in the agenda but won't be flagged for missing Zoom
   ],
 };
 
@@ -60,12 +71,37 @@ function createDailyAgenda() {
   try {
     const today = new Date();
     const events = fetchCalendarEvents_(today);
-    const doc = buildAgendaDoc_(today, events);
+    const fyiItems = fetchFyiEvents_(today);
+    const doc = buildAgendaDoc_(today, events, fyiItems);
     Logger.log('Daily agenda created: ' + doc.getUrl());
   } catch (e) {
     Logger.log('ERROR in createDailyAgenda: ' + e.message + '\n' + e.stack);
     throw e;
   }
+}
+
+// =============================================================================
+// TIMEZONE HELPERS
+// =============================================================================
+
+/**
+ * Returns ISO 8601 start/end timestamps for the given date in CONFIG.TIMEZONE.
+ * This ensures day boundaries are correct for the reader's timezone regardless
+ * of where the script is running.
+ *
+ * @param {Date} date
+ * @returns {{ start: string, end: string }}
+ */
+function getDayBounds_(date) {
+  var tz = CONFIG.TIMEZONE;
+  var dateStr = Utilities.formatDate(date, tz, 'yyyy-MM-dd');
+  // 'Z' gives offset like "-0700"; ISO 8601 requires "-07:00"
+  var offset    = Utilities.formatDate(date, tz, 'Z');
+  var isoOffset = offset.slice(0, 3) + ':' + offset.slice(3);
+  return {
+    start: dateStr + 'T00:00:00' + isoOffset,
+    end:   dateStr + 'T23:59:59' + isoOffset,
+  };
 }
 
 // =============================================================================
@@ -80,15 +116,11 @@ function createDailyAgenda() {
  * @returns {Object[]} Array of calendar event resource objects.
  */
 function fetchCalendarEvents_(date) {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  var bounds = getDayBounds_(date);
 
   const params = {
-    timeMin: startOfDay.toISOString(),
-    timeMax: endOfDay.toISOString(),
+    timeMin: bounds.start,
+    timeMax: bounds.end,
     singleEvents: true,
     orderBy: 'startTime',
     maxResults: 100,
@@ -130,8 +162,15 @@ function fetchCalendarEvents_(date) {
       return false;
     }
 
-    // Skip "try not to book" holds
+    // Skip events matching exclude keywords (also skips Zoom check implicitly)
     var titleLower = (event.summary || '').toLowerCase();
+    for (var k = 0; k < CONFIG.EXCLUDE_KEYWORDS.length; k++) {
+      if (titleLower.indexOf(CONFIG.EXCLUDE_KEYWORDS[k]) !== -1) {
+        return false;
+      }
+    }
+
+    // Skip "try not to book" holds
     if (titleLower.indexOf('try not to book') !== -1) {
       return false;
     }
@@ -150,6 +189,49 @@ function fetchCalendarEvents_(date) {
   });
 
   return filtered;
+}
+
+/**
+ * Fetches events from all FYI_CALENDARS for the given date.
+ * Includes all-day events (common for OOO/holiday calendars).
+ * Returns a flat array of { shortName, title } objects.
+ *
+ * @param {Date} date
+ * @returns {{shortName: string, title: string}[]}
+ */
+function fetchFyiEvents_(date) {
+  var bounds = getDayBounds_(date);
+
+  var params = {
+    timeMin: bounds.start,
+    timeMax: bounds.end,
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 100,
+    showDeleted: false,
+  };
+
+  var result = [];
+
+  for (var c = 0; c < CONFIG.FYI_CALENDARS.length; c++) {
+    var cal = CONFIG.FYI_CALENDARS[c];
+    var response;
+    try {
+      response = Calendar.Events.list(cal.id, params);
+    } catch (e) {
+      Logger.log('Warning: could not fetch FYI calendar "' + cal.shortName + '": ' + e.message);
+      continue;
+    }
+
+    var items = response.items || [];
+    for (var i = 0; i < items.length; i++) {
+      var event = items[i];
+      if (event.status === 'cancelled') continue;
+      result.push({ shortName: cal.shortName, title: event.summary || '(No title)' });
+    }
+  }
+
+  return result;
 }
 
 // =============================================================================
@@ -172,10 +254,11 @@ function fetchCalendarEvents_(date) {
  * @returns {string}
  */
 function formatTimeRange_(start, end) {
-  var startHour = start.getHours();    // 0–23
-  var startMin  = start.getMinutes();
-  var endHour   = end.getHours();
-  var endMin    = end.getMinutes();
+  var tz = CONFIG.TIMEZONE;
+  var startHour = parseInt(Utilities.formatDate(start, tz, 'H'), 10);  // 0–23
+  var startMin  = parseInt(Utilities.formatDate(start, tz, 'm'), 10);
+  var endHour   = parseInt(Utilities.formatDate(end,   tz, 'H'), 10);
+  var endMin    = parseInt(Utilities.formatDate(end,   tz, 'm'), 10);
 
   var startIsAm = startHour < 12;
   var endIsAm   = endHour < 12;
@@ -291,11 +374,6 @@ function hasZoomLink_(event) {
  * Returns true if the event title contains any of the skip keywords,
  * meaning we should NOT flag it for a missing Zoom link.
  *
- * Also returns true for 1:1 meetings (title contains " / " which is a common
- * naming pattern like "Chris / Andrew").
- * NOTE: We still include 1:1s in the Zoom check by default; pass
- * skipOneOnOnes=true if you want to exclude them.
- *
  * @param {Object} event
  * @returns {boolean}
  */
@@ -341,26 +419,24 @@ function formatDateHeading_(date) {
  *
  * @param {Date} date - The agenda date.
  * @param {Object[]} events - Filtered calendar event resources.
+ * @param {{shortName: string, title: string}[]} fyiItems - FYI calendar events.
  * @returns {GoogleAppsScript.Document.Document} The created document.
  */
-function buildAgendaDoc_(date, events) {
+function buildAgendaDoc_(date, events, fyiItems) {
   var dateHeading = formatDateHeading_(date);
   var docTitle = 'Agenda for ' + dateHeading;
 
-  // Create the document
-  var doc = DocumentApp.create(docTitle);
+  // Use the document this script is attached to (container-bound)
+  var doc = DocumentApp.getActiveDocument();
+  doc.setName(docTitle);
   var body = doc.getBody();
 
-  // Clear any default content
+  // Clear existing content
   body.clear();
 
   // ── Title (H1) ────────────────────────────────────────────────────────────
   var titlePara = body.appendParagraph('🚨 Agenda for ' + dateHeading);
   titlePara.setHeading(DocumentApp.ParagraphHeading.HEADING1);
-
-  // ── Fun Fact ──────────────────────────────────────────────────────────────
-  body.appendParagraph(''); // blank line
-  body.appendParagraph('Fun fact: [add fun fact here]');
 
   // ── Action Items (H2) ─────────────────────────────────────────────────────
   body.appendParagraph('');
@@ -412,10 +488,30 @@ function buildAgendaDoc_(date, events) {
 
   // ── FYI (H2) ──────────────────────────────────────────────────────────────
   body.appendParagraph('');
-  var fiyHeading = body.appendParagraph('FYI:');
-  fiyHeading.setHeading(DocumentApp.ParagraphHeading.HEADING2);
+  var fyiHeading = body.appendParagraph('FYI:');
+  fyiHeading.setHeading(DocumentApp.ParagraphHeading.HEADING2);
 
-  body.appendParagraph('[Admin: add FYI items here]');
+  if (fyiItems && fyiItems.length > 0) {
+    // Group events by calendar short name, preserving order of first appearance
+    var fyiGroups = {};
+    var fyiOrder = [];
+    for (var f = 0; f < fyiItems.length; f++) {
+      var sn = fyiItems[f].shortName;
+      if (!fyiGroups[sn]) {
+        fyiGroups[sn] = [];
+        fyiOrder.push(sn);
+      }
+      fyiGroups[sn].push(fyiItems[f].title);
+    }
+    for (var g = 0; g < fyiOrder.length; g++) {
+      var calName = fyiOrder[g];
+      var line = calName + ': ' + fyiGroups[calName].join('; ');
+      var fyiItem = body.appendListItem(line);
+      fyiItem.setGlyphType(DocumentApp.GlyphType.BULLET);
+    }
+  } else {
+    body.appendParagraph('[Admin: add FYI items here]');
+  }
 
   // ── Second horizontal rule ────────────────────────────────────────────────
   body.appendParagraph('');
@@ -436,45 +532,9 @@ function buildAgendaDoc_(date, events) {
     }
   }
 
-  // ── Save / move the document ──────────────────────────────────────────────
+  // ── Save the document ─────────────────────────────────────────────────────
   doc.saveAndClose();
-
-  if (CONFIG.FOLDER_ID && CONFIG.FOLDER_ID.trim() !== '') {
-    moveDocToFolder_(doc.getId(), CONFIG.FOLDER_ID);
-  }
 
   // Re-open to return a live reference (saveAndClose makes it read-only)
   return DocumentApp.openById(doc.getId());
-}
-
-// =============================================================================
-// DRIVE FOLDER MANAGEMENT
-// =============================================================================
-
-/**
- * Moves the document (by file ID) to the specified Drive folder,
- * removing it from its current parent(s).
- *
- * @param {string} docId - The Google Doc file ID.
- * @param {string} folderId - Target Google Drive folder ID.
- */
-function moveDocToFolder_(docId, folderId) {
-  try {
-    var file   = DriveApp.getFileById(docId);
-    var folder = DriveApp.getFolderById(folderId);
-
-    // Add to target folder
-    folder.addFile(file);
-
-    // Remove from all current parents (typically "My Drive" root)
-    var parents = file.getParents();
-    while (parents.hasNext()) {
-      var parent = parents.next();
-      if (parent.getId() !== folderId) {
-        parent.removeFile(file);
-      }
-    }
-  } catch (e) {
-    Logger.log('Warning: could not move doc to folder ' + folderId + ': ' + e.message);
-  }
 }

@@ -36,7 +36,7 @@
 // =============================================================================
 const CONFIG = {
   CALENDAR_ID: 'primary',         // 'primary' or a specific calendar email address
-  TIMEZONE: 'America/New_York', // IANA timezone for the agenda reader (e.g. 'America/New_York', 'Europe/London')
+  TIMEZONE: 'America/Los_Angeles', // IANA timezone for the agenda reader (e.g. 'America/New_York', 'Europe/London')
   FYI_CALENDARS: [
     { id: 'c_0d7b6c438e961742e737b9fd3a0fbd7ddc4fa863d93ac293f6fb407977ce8e57@group.calendar.google.com', shortName: 'CEE' },
     { id: 'mozilla.com_3u6oeq497a54e07tg7e5h48leg@group.calendar.google.com', shortName: 'SLT' },
@@ -53,11 +53,26 @@ const CONFIG = {
     'ooo',
     'out of office',
     'commute',
-    'therapy'
+    'therapy',
+    'eod'
   ],
   SKIP_ZOOM_CHECK_KEYWORDS: [     // Event titles containing these words appear in the agenda but won't be flagged for missing Zoom
   ],
 };
+
+// =============================================================================
+// MENU
+// =============================================================================
+
+/**
+ * Adds a custom menu to the Google Doc when it is opened.
+ */
+function onOpen() {
+  DocumentApp.getUi()
+    .createMenu('Agenda')
+    .addItem('Generate today\'s agenda', 'createDailyAgenda')
+    .addToUi();
+}
 
 // =============================================================================
 // MAIN ENTRY POINT
@@ -491,7 +506,6 @@ function buildAgendaDoc_(date, events, fyiItems) {
   }
 
   // ── FYI (H2) ──────────────────────────────────────────────────────────────
-  body.appendParagraph('');
   var fyiHeading = body.appendParagraph('FYI:');
   fyiHeading.setHeading(DocumentApp.ParagraphHeading.HEADING2);
 
@@ -518,7 +532,6 @@ function buildAgendaDoc_(date, events, fyiItems) {
   }
 
   // ── Second horizontal rule ────────────────────────────────────────────────
-  body.appendParagraph('');
   body.appendParagraph('__________________________');
 
   // ── QA (H2) ───────────────────────────────────────────────────────────────

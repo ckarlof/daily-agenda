@@ -95,6 +95,8 @@ const CONFIG = {
 
 Run `createDailyAgenda()` manually once from the editor (click the play button). Google will prompt you to authorize calendar and doc access.
 
+Once authorized, an **Agenda** menu will appear in the Google Doc's menu bar whenever the doc is open, letting you regenerate the agenda on demand without going into the script editor.
+
 ## How FYI calendars work
 
 Each calendar listed in `FYI_CALENDARS` is queried for events on the agenda day, including all-day events (useful for OOO and holiday calendars). Events are grouped by calendar and rendered as a single bullet per calendar:
@@ -129,9 +131,9 @@ Events in `EXCLUDE_KEYWORDS` never reach the Zoom check because they are filtere
 
 ## Admin workflow
 
-After the doc is created each morning:
+After the agenda is generated each morning:
 
-1. Open the bound Google Doc
+1. Open the bound Google Doc (the trigger runs automatically, or use **Agenda > Generate today's agenda** to run it manually)
 2. Fill in **Fun fact**, **Action Items**, and review the **FYI** section
 3. Resolve any missing Zoom links flagged in the QA section
 4. Copy into Slack

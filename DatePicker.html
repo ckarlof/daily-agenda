@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 16px;
+        margin: 0;
+        font-size: 13px;
+        color: #333;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: #444;
+      }
+      .selects {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 14px;
+      }
+      select {
+        padding: 5px 6px;
+        font-size: 13px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        background: white;
+      }
+      #selMonth { flex: 2; }
+      #selDay   { flex: 1; }
+      #selYear  { flex: 1.5; }
+      .buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      button {
+        padding: 6px 16px;
+        font-size: 13px;
+        border-radius: 4px;
+        cursor: pointer;
+        border: 1px solid #ccc;
+        background: #f8f8f8;
+      }
+      button.primary {
+        background: #1a73e8;
+        color: white;
+        border-color: #1a73e8;
+      }
+      button.primary:disabled {
+        background: #aaa;
+        border-color: #aaa;
+        cursor: not-allowed;
+      }
+      #status {
+        font-size: 12px;
+        color: #c00;
+        min-height: 14px;
+        margin-bottom: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <label>Select a date:</label>
+    <div class="selects">
+      <select id="selMonth"></select>
+      <select id="selDay"></select>
+      <select id="selYear"></select>
+    </div>
+    <div id="status"></div>
+    <div class="buttons">
+      <button onclick="google.script.host.close()">Cancel</button>
+      <button class="primary" id="generateBtn" onclick="generate()">Generate</button>
+    </div>
+
+    <script>
+      var MONTHS = [
+        'January','February','March','April','May','June',
+        'July','August','September','October','November','December'
+      ];
+
+      function populateSelects() {
+        var today = new Date();
+        var curYear  = today.getFullYear();
+        var curMonth = today.getMonth(); // 0-indexed
+        var curDay   = today.getDate();
+
+        // Month
+        var mSel = document.getElementById('selMonth');
+        for (var m = 0; m < 12; m++) {
+          var opt = document.createElement('option');
+          opt.value = m + 1;
+          opt.textContent = MONTHS[m];
+          if (m === curMonth) opt.selected = true;
+          mSel.appendChild(opt);
+        }
+
+        // Day (1–31; we'll also update on month change)
+        updateDays(curYear, curMonth + 1, curDay);
+
+        // Year: current year ± 1
+        var ySel = document.getElementById('selYear');
+        for (var y = curYear - 1; y <= curYear + 1; y++) {
+          var yOpt = document.createElement('option');
+          yOpt.value = y;
+          yOpt.textContent = y;
+          if (y === curYear) yOpt.selected = true;
+          ySel.appendChild(yOpt);
+        }
+
+        // Keep days in sync when month/year change
+        document.getElementById('selMonth').addEventListener('change', syncDays);
+        document.getElementById('selYear').addEventListener('change', syncDays);
+      }
+
+      function syncDays() {
+        var month    = parseInt(document.getElementById('selMonth').value, 10);
+        var year     = parseInt(document.getElementById('selYear').value, 10);
+        var prevDay  = parseInt(document.getElementById('selDay').value, 10);
+        updateDays(year, month, prevDay);
+      }
+
+      function updateDays(year, month, preferredDay) {
+        var daysInMonth = new Date(year, month, 0).getDate();
+        var dSel = document.getElementById('selDay');
+        dSel.innerHTML = '';
+        for (var d = 1; d <= daysInMonth; d++) {
+          var opt = document.createElement('option');
+          opt.value = d;
+          opt.textContent = d;
+          if (d === preferredDay || (preferredDay > daysInMonth && d === daysInMonth)) {
+            opt.selected = true;
+          }
+          dSel.appendChild(opt);
+        }
+      }
+
+      function pad(n) { return n < 10 ? '0' + n : String(n); }
+
+      function generate() {
+        var month = parseInt(document.getElementById('selMonth').value, 10);
+        var day   = parseInt(document.getElementById('selDay').value, 10);
+        var year  = parseInt(document.getElementById('selYear').value, 10);
+        var dateStr = year + '-' + pad(month) + '-' + pad(day);
+
+        var btn = document.getElementById('generateBtn');
+        btn.disabled = true;
+        document.getElementById('status').textContent = '';
+
+        google.script.run
+          .withSuccessHandler(function() {
+            google.script.host.close();
+          })
+          .withFailureHandler(function(err) {
+            document.getElementById('status').textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+          })
+          .generateAgendaForDate(dateStr);
+      }
+
+      populateSelects();
+    </script>
+  </body>
+</html>

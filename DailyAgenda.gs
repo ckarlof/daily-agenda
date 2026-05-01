@@ -13,11 +13,10 @@
  *    - Find "Google Calendar API" and click Add (use version v3).
  *    - This gives you access to the `Calendar` object used in this script.
  *
- * 3. Paste this entire file into the editor (replacing any existing code).
+ * 3. Copy all .gs files and DatePicker.html into the Apps Script project.
+ *    Edit Config.gs to set your calendar IDs, timezone, and keyword lists.
  *
- * 4. Set your CONFIG values below (CALENDAR_ID, FOLDER_ID, etc.).
- *
- * 5. Set up a daily time-based trigger:
+ * 4. Set up a daily time-based trigger:
  *    - Click the clock icon ("Triggers") in the left sidebar.
  *    - Click "+ Add Trigger" (bottom right).
  *    - Choose function: createDailyAgenda
@@ -26,39 +25,11 @@
  *    - Time: Choose your preferred morning window (e.g., 6am–7am)
  *    - Click Save.
  *
- * 6. On first run, authorize the script when prompted.
+ * 5. On first run, authorize the script when prompted.
  *
- * You can also run createDailyAgenda() manually from the editor to test it.
+ * You can also use the Agenda menu in the document to generate for any date,
+ * or run createDailyAgenda() manually from the editor to generate for today.
  */
-
-// =============================================================================
-// CONFIGURATION
-// =============================================================================
-const CONFIG = {
-  CALENDAR_ID: 'primary',         // 'primary' or a specific calendar email address
-  TIMEZONE: 'America/Los_Angeles', // IANA timezone for the agenda reader (e.g. 'America/New_York', 'Europe/London')
-  FYI_CALENDARS: [
-    { id: 'c_0d7b6c438e961742e737b9fd3a0fbd7ddc4fa863d93ac293f6fb407977ce8e57@group.calendar.google.com', shortName: 'CEE' },
-    { id: 'mozilla.com_3u6oeq497a54e07tg7e5h48leg@group.calendar.google.com', shortName: 'SLT' },
-    { id: 'c_0d34e4f8c4140929939a2e3f77c4e4b20be08af872469f8567ab38681c7395ca@group.calendar.google.com', shortName: 'CS' }
-
-    // Additional calendars whose events appear in the FYI section
-    // { id: 'example@group.calendar.google.com', shortName: 'Team OOO' },
-  ],
-  EXCLUDE_KEYWORDS: [             // Event titles containing these words are excluded from the agenda entirely (and implicitly skip the Zoom check)
-    'lunch',
-    'focus time',
-    'block',
-    'hold',
-    'ooo',
-    'out of office',
-    'commute',
-    'therapy',
-    'eod'
-  ],
-  SKIP_ZOOM_CHECK_KEYWORDS: [     // Event titles containing these words appear in the agenda but won't be flagged for missing Zoom
-  ],
-};
 
 // =============================================================================
 // MENU
@@ -70,8 +41,45 @@ const CONFIG = {
 function onOpen() {
   DocumentApp.getUi()
     .createMenu('Agenda')
-    .addItem('Generate today\'s agenda', 'createDailyAgenda')
+    .addItem('Generate agenda…', 'showDatePickerDialog')
     .addToUi();
+}
+
+/**
+ * Opens a modal dialog with a date picker so the user can choose which day's
+ * agenda to generate.
+ */
+function showDatePickerDialog() {
+  var html = HtmlService.createHtmlOutputFromFile('DatePicker')
+    .setWidth(300)
+    .setHeight(160);
+  DocumentApp.getUi().showModalDialog(html, 'Generate Agenda');
+}
+
+/**
+ * Called from the DatePicker dialog with the selected date string (YYYY-MM-DD).
+ * Parses the string in CONFIG.TIMEZONE and generates the agenda for that day.
+ *
+ * @param {string} dateStr - ISO date string, e.g. "2026-05-01"
+ */
+function generateAgendaForDate(dateStr) {
+  // Parse the date parts and build a Date in the script's default timezone.
+  // Using noon avoids any DST edge cases when converting to a calendar day.
+  var parts = dateStr.split('-');
+  var year  = parseInt(parts[0], 10);
+  var month = parseInt(parts[1], 10) - 1; // 0-indexed
+  var day   = parseInt(parts[2], 10);
+  var date  = new Date(year, month, day, 12, 0, 0);
+
+  try {
+    var events   = fetchCalendarEvents_(date);
+    var fyiItems = fetchFyiEvents_(date);
+    var doc      = buildAgendaDoc_(date, events, fyiItems);
+    Logger.log('Agenda created for ' + dateStr + ': ' + doc.getUrl());
+  } catch (e) {
+    Logger.log('ERROR in generateAgendaForDate: ' + e.message + '\n' + e.stack);
+    throw e;
+  }
 }
 
 // =============================================================================
@@ -80,7 +88,7 @@ function onOpen() {
 
 /**
  * Creates the daily agenda Google Doc for today.
- * Call this function manually or via a time-based trigger.
+ * Intended for use with a time-based trigger; also callable manually from the editor.
  */
 function createDailyAgenda() {
   try {
@@ -443,7 +451,6 @@ function buildAgendaDoc_(date, events, fyiItems) {
 
   // Use the document this script is attached to (container-bound)
   var doc = DocumentApp.getActiveDocument();
-  doc.setName(docTitle);
   var body = doc.getBody();
 
   // Clear existing content
